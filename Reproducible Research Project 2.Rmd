@@ -1,0 +1,199 @@
+---
+title: "Impact of weather events using storm database"
+author: "KHAWLA"
+date: "2023-04-20"
+output:
+  html_document:
+    df_print: paged
+---
+Reproducible Research Project 2
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Synopsis
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in **fatalities**, **injuries**, and **property damage**, and preventing such outcomes to the extent possible is a key concern.
+This study explores the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
+Tornadoes are wreaking havoc among the catastrophes with the most fatalities and injuries while property damage is due to floods.
+
+# Data
+
+The events in the database start in the year 1950 and end in November 2011.
+
+* **DataSet**: [Storm Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)
+* **Documentation**: [National Weather Service](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+# Data Processing
+
+### Loading storm data
+```{r pressure, echo=FALSE}
+setwd("C:/Users/KHAWLA/Downloads/")
+```
+```{r, echo=TRUE}
+file.url <- ("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2")
+download.file(file.url, destfile = "repdata_data_StormData.csv.bz2")
+data.storm <- read.csv(bzfile("repdata_data_StormData.csv.bz2")) 
+```
+
+### Data Preview
+
+```{r}
+str(data.storm)
+summary(data.storm)
+head(data.storm)
+names(data.storm) <- tolower(names(data.storm))
+```
+The data set contains 37 variables and 902297 observations.
+
+### Data Preparation
+
+```{r}
+library(dplyr)
+storm <- data.storm %>%
+  select(c("evtype","fatalities","injuries","propdmg","propdmgexp","cropdmg","cropdmgexp"))
+head(storm)
+summary(storm)
+str(storm)
+View(storm)
+sum(is.na(storm))
+```
+We'll use only 7 variables:
+
+**evtype**: type of event
+
+**fatalities**: number of fatalities for each event
+
+**injuries**: number of injuries for each event
+
+**propdmg**: property damage
+
+**propdmgexp**: crop damage
+
+**cropdmg**: property damage exponents (in B, M, K and H)
+
+**cropdmgexp**: crop damage exponents (in B, M, K and H)
+
+```{r}
+rm(data.storm)
+```
+we remove the raw data set and keep on working on the *storm* data set
+
+### Data Cleaning
+
+```{r}
+sum(unique(storm$fatalities))
+sum(unique(storm$injuries))
+sum(unique(storm$propdmg))
+unique(storm$propdmgexp)
+unique(storm$cropdmgexp)
+```
+we look for any unusual data 
+```{r}
+storm$propdmgexp[storm$propdmgexp %in% c("","+","-","?")] <- "0"
+storm$propdmgexp[storm$propdmgexp %in% c("B")] <- "9"
+storm$propdmgexp[storm$propdmgexp %in% c("M","m")] <- "6"
+storm$propdmgexp[storm$propdmgexp %in% c("K")] <- "3"
+storm$propdmgexp[storm$propdmgexp %in% c("H","h")] <- "2"
+```
+
+```{r}
+storm$cropdmgexp[storm$cropdmgexp %in% c("","?")] <- "0"
+storm$cropdmgexp[storm$cropdmgexp %in% c("B")] <- "9"
+storm$cropdmgexp[storm$cropdmgexp %in% c("M","m")] <- "6"
+storm$cropdmgexp[storm$cropdmgexp %in% c("K","k")] <- "3"
+```
+
+```{r}
+storm$propdmgtotal <- storm$propdmg*(10^as.numeric(storm$propdmgexp))
+storm$cropdmgtotal <- storm$cropdmg*(10^as.numeric(storm$cropdmgexp))
+storm$dmgtotal <- storm$propdmgtotal+ storm$cropdmgtotal
+```
+
+we found that the last two variables do not have clean data so we clean it.
+
+```{r}
+storm_by_event <- storm %>%
+  group_by(evtype) %>%
+  summarize(sum_fatalities = sum(fatalities),
+            sum_injuries = sum(injuries),
+            sum_propdmg = sum(propdmgtotal),
+            sum_cropdmg = sum(cropdmgtotal),
+            sum_totaldmg = sum(dmgtotal))
+head(storm_by_event)
+```
+we summarized the data by events showing each event with its summarized fatalities, injuries and damages.
+
+1. Across the United States, which types of events (as indicated in the **EVTYPE** variable) are most harmful with respect to population health?
+```{r}
+# Events that caused most fatalities
+storm_fatalities <- arrange(storm_by_event, desc(sum_fatalities))
+fatalitydata <- head(storm_fatalities)
+fatalitydata
+
+# Events that caused most injuries
+storm_injuries <- arrange(storm_by_event, desc(sum_injuries))
+injurydata <- head(storm_injuries)
+injurydata
+```
+we retain only the first 6 events that caused the most fatalities and injuries.
+
+2. Across the United States, which types of events have the greatest economic consequences?
+```{r}
+# Events with greatest economic consequences
+storm_damage <- arrange(storm_by_event, desc(sum_totaldmg))
+damagedata <- head(storm_damage)
+damagedata
+```
+we retain only the first 6 events that caused the most economic consequences.
+
+# Results
+```{r}
+library(ggplot2)
+```
+**FATALITIES**
+```{r}
+ggplot(fatalitydata, aes(reorder(evtype, -sum_fatalities),sum_fatalities))+
+  geom_bar(stat = "identity",color= "black", fill="purple")+
+  geom_text(aes(label = sum_fatalities), nudge_y = 200)+
+  ggtitle("Events that caused most fatalities")+
+  xlab("Event type") + ylab("Total of fatalities") +
+  theme_classic()
+```
+
+it looks like **Tornadoes** causes the most fatalities with 6533 and exceeds by far **excessive heat** which registered 1903 fatalities.
+
+**INJURIES**
+```{r}
+ggplot(injurydata, aes(reorder(evtype, -sum_injuries),sum_injuries))+
+  geom_bar(stat = "identity",color= "black", fill="pink")+
+  geom_text(aes(label = sum_injuries), nudge_y = 4000)+
+  ggtitle("Events that caused most injuries")+
+  xlab("Event type") + ylab("Total of injuries") +
+  theme_classic()
+```
+
+it looks like **Tornadoes** causes the most injuries with 91346 and exceeds by far **TSTM Wind** which registered 6957 injuries.
+
+**ECONOMIC CONSEQUENCES/DAMAGES**
+```{r}
+library(tidyverse)
+```
+```{r}
+head(damagedata)
+damage <- damagedata %>%
+  gather(key = "Type", value = "TotalDamage",c("sum_propdmg","sum_cropdmg")) %>%
+  select(evtype, Type, TotalDamage)
+
+damage
+damage$Type[damage$Type %in% c("sum_propdmg")] <- "property damage"
+damage$Type[damage$Type %in% c("sum_cropdmg")] <- "crop damage"
+damage
+damage$evtype <- with(data = damage, reorder(evtype, -TotalDamage))
+
+ggplot(damage, aes(x = evtype, y = TotalDamage, fill = Type))+
+  geom_bar(position = "stack" , stat = "identity")+
+  ggtitle("Events that caused most damages")+
+  xlab("Event type") + ylab("Total of damages") +
+  theme_classic()+ theme(axis.text.x = element_text(angle = 10))
+```
+
+it looks like **Floods** cause the most damage in terms of crop and property damages followed by **Hurricanes** and **Tornadoes**
